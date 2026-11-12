@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking - Tec de Monterrey</title>
+    <style>
+     /* Estilo y formato de la interfaz*/
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e2e3e9;
+            color: #000000;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #1052f9;
+            margin-bottom: 5px;
+        }
+
+        /* Formato para la sección de datos */
+        .dashboard {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #f4f0f0;
+            padding: 15px 20px;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .card h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+            color: #363535;
+        }
+
+        .card span {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #1ed760;
+        }
+
+        /* Bloque de estacionamiento*/
+        .parking-container {
+            background-color: #ffffff;
+            border: 2px solid #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+            justify-content: center;
+            overflow-x: auto;
+            max-width: 100%;
+            width: 1000px;
+        }
+
+        .parking-column-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+        }
+
+        /* Como el último bloque tiene solo una columna, se pone aparte */
+        #colGroup6 {
+            grid-template-columns: repeat(1, 1fr);
+        }
+
+        .aisle {
+            width: 40px;
+            background-color: #ffffff;
+            border-left: 2px dashed #555;
+            border-right: 2px dashed #555;
+            min-height: 500px;
+        }
+
+        /* Cajones de Estacionamiento */
+        .spot {
+            width: 60px;
+            height: 45px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 9px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .spot:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+
+        .spot.available {
+            background-color: #6eb193; /* Verde */
+            color: #fff;
+            border: 1px solid #157347;
+        }
+
+        .spot.occupied {
+            background-color: #d4828a; /* Rojo */
+            color: #fff;
+            border: 1px solid #b02a37;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Smart Parking System</h1>
+        <p>Tec de Monterrey - Karime Martinez</p>
+        <p id="clock-display" style="font-weight: bold; color: #363535; margin-top: 5px;">Hora: 07:00 AM</p>
+    </header>
+
+    <!-- Sección de datos y de estadísticas -->
+    <!-- estoy utilizando class, en vez de id porque quiero que varios elementos tengan el mismo formato -->
+    <div class="dashboard">
+        <div class="card">
+            <h3>Total de lugares</h3>
+            <span id="total-spaces">165</span>
+        </div>
+        <div class="card">
+            <h3>Disponibles</h3>
+            <span id="available-spaces" style="color: #2ecc71;">0</span>
+        </div>
+        <div class="card">
+            <h3>Ocupados</h3>
+            <span id="occupied-spaces" style="color: #e74c3c;">0</span>
+        </div>
+        <div class="card">
+            <h3>Disponibilidad</h3>
+            <span id="occupancy-rate">0%</span>
+        </div>
+    </div>
+
+    <!-- Cajones de estacionamiento -->
+    <div class="parking-container">
+    
+        <div class="parking-column-group" id="colGroup6"></div>
+        <div class="aisle"></div>
+
+        <div class="parking-column-group" id="colGroup5"></div>
+        <div class="aisle"></div>
+
+        <div class="parking-column-group" id="colGroup4"></div>
+        <div class="aisle"></div>
+
+        <div class="parking-column-group" id="colGroup3"></div>
+        <div class="aisle"></div>
+
+        <div class="parking-column-group" id="colGroup2"></div>
+        <div class="aisle"></div>
+
+        <div class="parking-column-group" id="colGroup1"></div>
+    </div>
+
+    <!--Javascript-->
+    <script>
+        // Configuración inicial de los cajones
+        const totalSpaces = 165; // número de cajones
+        let spaces = [];
+        let simulationInterval;
+        let isSimulationRunning = true;
+        let simulatedHour = 7.0; // Empieza a las 7 de la mañana
+
+        // Esta funcion calcula la disponibilidad de acuerdo a la hora
+        function getOccupancyProbability(hour) {
+            if (hour >= 22 || hour < 6) {
+                return 0.15; // Noche: muy poquitos carros
+            } else if (hour >= 6 && hour < 9) {
+                return 0.15 + (hour - 6) * 0.24; // De 6am a 9am sube
+            } else if (hour >= 9 && hour < 17) {
+                return 0.88; // De 9am a 5pm casi casi lleno
+            } else {
+                return 0.88 - (hour - 17) * 0.14; // De 5pm a 10pm se empieza a vaciar
+            }
+        }
+
+        // Iniciar los datos de los espacios
+        function initParking() {
+            spaces = [];
+            let prob = getOccupancyProbability(simulatedHour);
+
+            for (let i = 1; i <= totalSpaces; i++) {
+                spaces.push({
+                    id: i,
+                    // Math.random() es una función que decide si empieza libre o ocupado
+                    isAvailable: Math.random() > prob 
+                });
+            }
+            renderParking();
+            updateDashboard();
+            updateClock();
+        }
+
+        // Muestra los cajones y nos permite hacer clic en ellos 
+        function renderParking() {
+            const groups = [
+                document.getElementById('colGroup1'),
+                document.getElementById('colGroup2'),
+                document.getElementById('colGroup3'),
+                document.getElementById('colGroup4'),
+                document.getElementById('colGroup5'),
+                document.getElementById('colGroup6')
+            ];
+
+            // Esto limpia los cajones antes de volver a dibujarlos
+            groups.forEach(g => g.innerHTML = '');
+
+            spaces.forEach((space, index) => {
+                const div = document.createElement('div');
+                div.classList.add('spot');
+                div.classList.add(space.isAvailable ? 'available' : 'occupied');
+                div.innerHTML = `C-${space.id}`;
+
+                div.addEventListener('click', () => {
+                    space.isAvailable = !space.isAvailable;
+                    renderParking();
+                    updateDashboard();
+                });
+
+                // Hace la cuadrícula
+                let groupIndex = Math.floor(index / 30);
+                if (groupIndex > 5) groupIndex = 5;
+
+                groups[groupIndex].appendChild(div);
+            });
+        }
+
+        // Actualiza en tiempo real
+        function updateDashboard() {
+            const availableCount = spaces.filter(s => s.isAvailable).length;
+            const occupiedCount = totalSpaces - availableCount;
+            const occupancyRate = Math.round((occupiedCount / totalSpaces) * 100);
+
+            document.getElementById('total-spaces').textContent = totalSpaces;
+            document.getElementById('available-spaces').textContent = availableCount;
+            document.getElementById('occupied-spaces').textContent = occupiedCount;
+            document.getElementById('occupancy-rate').textContent = occupancyRate + '%';
+        }
+
+        function updateClock() {
+            let h = Math.floor(simulatedHour);
+            let m = Math.floor((simulatedHour - h) * 60);
+            let ampm = h >= 12 ? 'PM' : 'AM';
+            let displayH = h % 12 === 0 ? 12 : h % 12;
+            let displayM = m < 10 ? '0' + m : m;
+            document.getElementById('clock-display').textContent = `Hora: ${displayH}:${displayM} ${ampm}`;
+        }
+
+        function startSimulation() {
+            simulationInterval = setInterval(() => {
+                if (!isSimulationRunning) return;
+
+                // El reloj avanza cada 30 min
+                simulatedHour += 0.5;
+                if (simulatedHour >= 24) {
+                    simulatedHour = 0;
+                }
+
+                let prob = getOccupancyProbability(simulatedHour);
+
+                // Actualiza los espacios
+                spaces.forEach(space => {
+                    if (Math.random() < 0.3) {
+                        space.isAvailable = Math.random() > prob;
+                    }
+                });
+
+                renderParking();
+                updateDashboard();
+                updateClock();
+            }, 6000); // Se actualiza cada 6 segundos
+        }
+
+        // Funciones que hacen que cargue al abrir la página
+        initParking();
+        startSimulation();
+    </script>
+</body>
+</html>
